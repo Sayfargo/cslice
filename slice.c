@@ -1,15 +1,32 @@
 #include "slice.h"
+#include "logger.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <limits.h>
 #include <string.h>
 
+Slice slice_sub(Slice s, size_t start, size_t end) { 
+    if (start > end || end > s.cap) {
+        LOG_ERROR("Invalid slice parameters. Start: %zu, End: %zu, Length: %zu\n", start, end, s.len);
+        return s;
+    }
+
+    void* new_ptr = (char*)s.ptr + start * s.elem_size; 
+
+    if (new_ptr == NULL) {
+        PANIC("Failed to create sub-slice. Start: %zu, End: %zu\n", start, end);
+    }
+    
+    Slice new_slice = {new_ptr, end - start, s.cap - start, s.elem_size, false}; 
+
+    return new_slice;
+}
+
 // Function to set the value of an element at a specific index in the slice
 void slice_set(Slice s, size_t index, void *elem) {
     if (index >= s.len)
     {
-        fprintf(stderr, "Index out of range. Index: %zu, Length: %zu\n", index, s.len);
-        abort();
+        PANIC("Index out of range. Index: %zu, Length: %zu\n", index, s.len);
     }
     
     void* dest = (char*)s.ptr + index * s.elem_size;
@@ -19,7 +36,10 @@ void slice_set(Slice s, size_t index, void *elem) {
 
 // Function to free the memory allocated for the slice
 void slice_free(Slice* s) {
-    free(s->ptr);
+    if (s->is_owner == true)
+    {
+        free(s->ptr);
+    }
     s->ptr = NULL;
     s->cap = 0;
     s->len = 0;
@@ -29,7 +49,7 @@ void slice_free(Slice* s) {
 size_t slice_copy(Slice dst, Slice src) {
     if (dst.elem_size != src.elem_size) 
     {
-        fprintf(stderr, "Error: Element sizes do not match. Destination size: %zu, Source size: %zu\n", dst.elem_size, src.elem_size);
+        LOG_ERROR("Element sizes do not match. Destination size: %zu, Source size: %zu\n", dst.elem_size, src.elem_size);
         return 0;
     }
 
@@ -44,10 +64,10 @@ size_t slice_copy(Slice dst, Slice src) {
 // Function to create a new slice with the specified element size, length, and capacity
 Slice slice_make(size_t elem_size, size_t len, size_t cap) {
     
-    Slice empty = {NULL, 0, 0, 0};
+    Slice empty = {NULL, 0, 0, 0, false};
 
     if (len > cap || cap == 0) {
-        fprintf(stderr, "Error: Invalid slice parameters. Length: %zu, Capacity: %zu\n", len, cap);
+        LOG_ERROR("Invalid slice parameters. Length: %zu, Capacity: %zu\n", len, cap);
         return empty;
     }
 
@@ -55,11 +75,11 @@ Slice slice_make(size_t elem_size, size_t len, size_t cap) {
 
     if (arr == NULL)
     {
-        fprintf(stderr, "Error: Failed to allocate memory for slice.\n");
+        LOG_ERROR("Failed to allocate memory for slice.\n");
         return empty;
     }
 
-    Slice s = {arr, len, cap, elem_size};
+    Slice s = {arr, len, cap, elem_size, true};
 
     return s;
     
@@ -70,8 +90,7 @@ Slice slice_append(Slice s, void *elem) {
 
     if (s.ptr == NULL || elem == NULL)
     {
-        fprintf(stderr, "Error: Pointer or element is NULL.\n");
-        abort();
+        PANIC("Pointer or element is NULL.\n");
     }
     
     size_t new_len = s.len + 1;
@@ -82,7 +101,7 @@ Slice slice_append(Slice s, void *elem) {
         if (s.cap >= 1024) {
 
             if (s.cap > SIZE_MAX - (s.cap / 4)) {
-                fprintf(stderr, "Error: Slice capacity overflow. Current capacity: %zu\n", s.cap);
+                LOG_ERROR("Slice capacity overflow. Current capacity: %zu\n", s.cap);
                 return s;
             }
 
@@ -91,7 +110,7 @@ Slice slice_append(Slice s, void *elem) {
 
             if (s.cap > SIZE_MAX / 2)
             {
-                fprintf(stderr, "Error: Slice capacity overflow. Current capacity: %zu\n", s.cap);
+                LOG_ERROR("Slice capacity overflow. Current capacity: %zu\n", s.cap);
                 return s;
             }
 
@@ -101,7 +120,7 @@ Slice slice_append(Slice s, void *elem) {
 
         if (new_cap > SIZE_MAX / s.elem_size)
         {
-            fprintf(stderr, "Error: Slice capacity overflow. Current capacity: %zu\n", s.cap);
+            LOG_ERROR("Slice capacity overflow. Current capacity: %zu\n", s.cap);
             return s;
         }
 
@@ -109,8 +128,7 @@ Slice slice_append(Slice s, void *elem) {
 
         if (new_arr == NULL)
         {
-            fprintf(stderr, "Error: Failed to reallocate memory for slice.\n");
-            abort();
+            PANIC("Failed to reallocate memory for slice.\n");
 
         }
 
@@ -132,8 +150,7 @@ Slice slice_append(Slice s, void *elem) {
 void* slice_get(Slice s, size_t index) {
 
     if (index >= s.len) {
-        fprintf(stderr, "Index out of range. Index: %zu, Length: %zu\n", index, s.len);
-        abort();
+        PANIC("Index out of range. Index: %zu, Length: %zu\n", index, s.len);
     }
 
     return (char*)s.ptr + index * s.elem_size;
